@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,height=device-height,initial-scale=1.0,maximum-scale=1.0,user-scalable=no" />
+    <title>Unity WebGL Player | 龙哥的秘密花园_微信小游戏</title>
+    <!-- Telegram Mini App SDK：必须放在 head 里其他脚本之前 -->
+    <script src="https://telegram.org/js/telegram-web-app.js?63"></script>
+    <style>
+      * { border: 0; margin: 0; padding: 0; }
+      html, body { width: 100%; height: 100%; overflow: hidden; }
+      #unity-container { position: absolute; inset: 0; }
+      #unity-canvas { width: 100%; height: 100%; display: block; }
+      #unity-loading-bar {
+        position: absolute; left: 50%; top: 50%;
+        transform: translate(-50%, -50%);
+        width: 240px; display: none;
+      }
+      #unity-progress-bar-empty { width: 100%; height: 4px; border-radius: 2px; background: rgba(128,128,128,.35); overflow: hidden; }
+      #unity-progress-bar-full { width: 0%; height: 100%; border-radius: 2px; background: #4a9eff; transition: width .2s ease; }
+      #unity-warning { display: none; position: absolute; left: 8px; right: 8px; bottom: 8px; font: 13px/1.5 sans-serif; }
+    </style>
+    <script>
+      // 主题色同步：加载前先铺底色，避免白屏闪烁
+      (function () {
+        var css = ['background-color: #000000', 'color: #ffffff'];
+        try {
+          if (window.Telegram && Telegram.WebApp && Telegram.WebApp.themeParams) {
+            var tp = Telegram.WebApp.themeParams;
+            var bg = tp.bg_color || '#000000';
+            var fg = tp.text_color || '#ffffff';
+            css = ['background-color: ' + bg, 'color: ' + fg];
+            document.documentElement.style.setProperty('--tg-bg', bg);
+          }
+        } catch (e) {}
+        document.body.style.cssText = css.join(';');
+      })();
+
+      // 模板行为默认值（会被一键打包工具生成的 tg-runtime-config.json 覆盖）
+      var TG_AUTO_EXPAND = true;          // 引擎加载完后自动 expand() 到最大高度
+      var TG_AUTO_FULLSCREEN = false;     // 首次用户点击后进入全屏（沉浸式游戏建议 true）
+      var TG_DEBUG = false;
+
+      // 运行时配置：一键打包工具生成 tg-runtime-config.json；缺失时用上方默认值
+      var TG_CONFIG = undefined;
+      fetch('tg-runtime-config.json').then(function (r) { return r.json(); })
+        .then(function (c) { TG_CONFIG = c; })
+        .catch(function () { TG_CONFIG = null; });
+
+      function tgApplyConfig() {
+        if (!TG_CONFIG) return;
+        if (typeof TG_CONFIG.autoExpand === 'boolean') TG_AUTO_EXPAND = TG_CONFIG.autoExpand;
+        if (typeof TG_CONFIG.autoFullscreen === 'boolean') TG_AUTO_FULLSCREEN = TG_CONFIG.autoFullscreen;
+        if (TG_CONFIG.debug) TG_DEBUG = true;
+        if (TG_CONFIG.lockOrientation) {
+          try {
+            var a = window.Telegram && window.Telegram.WebApp;
+            if (a && a.lockOrientation) a.lockOrientation();
+            tgLog('orientation locked: ' + TG_CONFIG.lockOrientation);
+          } catch (e) {}
+        }
+      }
+
+      // 等配置就绪（最长 3s）再 ready/expand，避免配置晚到导致行为丢失
+      function tgWhenReady() {
+        tgApplyConfig();
+        try {
+          var app = window.Telegram && window.Telegram.WebApp;
+          if (app) {
+            app.ready(); // 隐藏 Telegram 加载占位符（必须调用）
+            if (TG_AUTO_EXPAND && !app.isExpanded) app.expand();
+            tgLog('ready + expand done (expand=' + TG_AUTO_EXPAND + ', fullscreen=' + TG_AUTO_FULLSCREEN + ')');
+          }
+        } catch (e) {
+          tgLog('ready/expand failed', e);
+        }
+        if (TG_AUTO_FULLSCREEN) {
+          function tryFullscreen() {
+            try {
+              var app = window.Telegram && window.Telegram.WebApp;
+              if (app && !app.isFullscreen && app.requestFullscreen) app.requestFullscreen();
+            } catch (e) {}
+            window.removeEventListener('pointerdown', tryFullscreen);
+            window.removeEventListener('touchstart', tryFullscreen);
+          }
+          window.addEventListener('pointerdown', tryFullscreen);
+          window.addEventListener('touchstart', tryFullscreen);
+        }
+      }
+
+      var tgConfigTries = 0;
+      (function tgWaitConfig() {
+        tgConfigTries++;
+        if (TG_CONFIG !== undefined || tgConfigTries > 30) { tgWhenReady(); return; }
+        setTimeout(tgWaitConfig, 100);
+      })();
+
+      var gameInstance = null;
+      var container = document.querySelector('#unity-container');
+      var canvas = document.querySelector('#unity-canvas');
+      var loadingBar = document.querySelector('#unity-loading-bar');
+      var progressBarFull = document.querySelector('#unity-progress-bar-full');
+      var warningBanner = document.querySelector('#unity-warning');
+
+      function unityShowBanner(msg, type) {
+        function updateBannerVisibility() {
+          warningBanner.style.display = warningBanner.children.length ? 'block' : 'none';
+        }
+        var div = document.createElement('div');
+        div.innerHTML = msg;
+        warningBanner.appendChild(div);
+        if (type == 'error') div.style = 'background: red; padding: 10px;';
+        else {
+          if (type == 'warning') div.style = 'background: yellow; padding: 10px;';
+          setTimeout(function () { warningBanner.removeChild(div); updateBannerVisibility(); }, 5000);
+        }
+        updateBannerVisibility();
+      }
+
+      function tgLog() {
+        if (TG_DEBUG && window.console) console.log.apply(console, ['[TG]'].concat([].slice.call(arguments)));
+      }
+
+      // 事件转发到 Unity（TgBridgeEvents.OnJsEvent；d 必须是 JSON 字符串）
+      function tgForward(type, data) {
+        if (!gameInstance) return;
+        var payload = { t: type };
+        if (data !== undefined && data !== null) payload.d = JSON.stringify(data);
+        try {
+          gameInstance.SendMessage('TgBridgeManager', 'OnJsEvent', JSON.stringify(payload));
+        } catch (e) {
+          tgLog('SendMessage failed', e);
+        }
+      }
+
+      function tgForwardAll() {
+        if (!window.Telegram || !window.Telegram.WebApp) return;
+        var app = Telegram.WebApp;
+        app.onEvent('themeChanged', function () {
+          try { document.body.style.backgroundColor = app.themeParams.bg_color || '#000000'; } catch (e) {}
+          tgForward('themeChanged', {
+            colorScheme: app.colorScheme,
+            themeParams: app.themeParams,
+          });
+        });
+        app.onEvent('viewportChanged', function (e) {
+          tgForward('viewportChanged', {
+            viewportHeight: app.viewportHeight,
+            viewportStableHeight: app.viewportStableHeight,
+            isExpanded: app.isExpanded,
+            isStateStable: !!(e && e.isStateStable),
+          });
+        });
+        app.onEvent('fullscreenChanged', function (e) {
+          tgForward('fullscreenChanged', { isFullscreen: !!(e && e.isFullscreen) });
+        });
+        app.onEvent('backButtonClicked', function () { tgForward('backButtonClicked'); });
+        app.onEvent('mainButtonClicked', function () { tgForward('mainButtonClicked'); });
+        app.onEvent('secondaryButtonClicked', function () { tgForward('secondaryButtonClicked'); });
+        app.onEvent('settingsButtonClicked', function () { tgForward('settingsButtonClicked'); });
+        app.onEvent('popupClosed', function (e) {
+          tgForward('popupClosed', { button_id: (e && e.button_id) || '' });
+        });
+        app.onEvent('invoiceClosed', function (e) {
+          tgForward('invoiceClosed', {
+            status: (e && e.status) || '',
+            slug: (e && e.slug) || '',
+          });
+        });
+        tgLog('event listeners registered');
+      }
+
+      var buildUrl = 'Build';
+      var loaderUrl = buildUrl + '/TG_WebGL.loader.js';
+      var config = {
+        dataUrl: buildUrl + '/TG_WebGL.data.br',
+        frameworkUrl: buildUrl + '/TG_WebGL.framework.js.br',
+        codeUrl: buildUrl + '/TG_WebGL.wasm.br',
+        streamingAssetsUrl: 'StreamingAssets',
+        companyName: "DefaultCompany",
+        productName: "龙哥的秘密花园_微信小游戏",
+        productVersion: "0.1.0",
+        showBanner: unityShowBanner,
+      };
+
+      loadingBar.style.display = 'block';
+
+      var script = document.createElement('script');
+      script.src = loaderUrl;
+      script.onload = function () {
+        createUnityInstance(canvas, config, function (progress) {
+          progressBarFull.style.width = 100 * progress + '%';
+        }).then(function (instance) {
+          loadingBar.style.display = 'none';
+          gameInstance = instance;
+          tgForwardAll();
+          // ready()/expand()/全屏/方向锁由 tgWaitConfig → tgWhenReady 统一处理（等配置就绪）
+        }).catch(function (message) {
+          alert(message);
+        });
+      };
+      document.body.appendChild(script);
+    </script>
+  </body>
+</html>
