@@ -21,7 +21,7 @@
       #unity-warning { display: none; position: absolute; left: 8px; right: 8px; bottom: 8px; font: 13px/1.5 sans-serif; }
     </style>
     <script>
-      // 主题色同步：加载前先铺底色，避免白屏闪烁
+      // 主题色同步：加载前先铺底色，避免白屏闪烁（head 阶段 body 未解析，操作 documentElement）
       (function () {
         var css = ['background-color: #000000', 'color: #ffffff'];
         try {
@@ -33,13 +33,29 @@
             document.documentElement.style.setProperty('--tg-bg', bg);
           }
         } catch (e) {}
-        document.body.style.cssText = css.join(';');
+        document.documentElement.style.cssText = css.join(';');
       })();
-
+    </script>
+  </head>
+  <body>
+    <div id="unity-container">
+      <canvas id="unity-canvas" width=960 height=600 tabindex="-1"></canvas>
+      <div id="unity-loading-bar">
+        <div id="unity-progress-bar-empty">
+          <div id="unity-progress-bar-full"></div>
+        </div>
+      </div>
+      <div id="unity-warning"></div>
+    </div>
+    <script>
       // 模板行为默认值（会被一键打包工具生成的 tg-runtime-config.json 覆盖）
       var TG_AUTO_EXPAND = true;          // 引擎加载完后自动 expand() 到最大高度
       var TG_AUTO_FULLSCREEN = false;     // 首次用户点击后进入全屏（沉浸式游戏建议 true）
       var TG_DEBUG = false;
+
+      function tgLog() {
+        if (TG_DEBUG && window.console) console.log.apply(console, ['[TG]'].concat([].slice.call(arguments)));
+      }
 
       // 运行时配置：一键打包工具生成 tg-runtime-config.json；缺失时用上方默认值
       var TG_CONFIG = undefined;
@@ -115,10 +131,6 @@
           setTimeout(function () { warningBanner.removeChild(div); updateBannerVisibility(); }, 5000);
         }
         updateBannerVisibility();
-      }
-
-      function tgLog() {
-        if (TG_DEBUG && window.console) console.log.apply(console, ['[TG]'].concat([].slice.call(arguments)));
       }
 
       // 事件转发到 Unity（TgBridgeEvents.OnJsEvent；d 必须是 JSON 字符串）
