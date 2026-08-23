@@ -48,6 +48,133 @@
       <div id="unity-warning"></div>
     </div>
     <script>
+      // Mock：非 Telegram 环境（浏览器调试）模拟 Telegram.WebApp，供 TgBridge.jslib 使用
+      (function () {
+        try {
+          if (window.Telegram && window.Telegram.WebApp && window.Telegram.WebApp.initData) return; // 真机环境
+        } catch (e) {}
+        if (window.TgMockApp) return;
+
+        var listeners = {};
+        var storage = {};
+        try {
+          if (typeof localStorage !== 'undefined') storage = JSON.parse(localStorage.getItem('tg_mock_storage') || '{}');
+        } catch (e) { storage = {}; }
+
+        function on(type, cb) { (listeners[type] = listeners[type] || []).push(cb); }
+        function emit(type, data) {
+          (listeners[type] || []).slice().forEach(function (cb) { try { cb(data); } catch (e) {} });
+        }
+        function forward(type, data) {
+          if (typeof gameInstance !== 'undefined' && gameInstance) {
+            var payload = { t: type };
+            if (data !== undefined && data !== null) payload.d = JSON.stringify(data);
+            try { gameInstance.SendMessage('TgBridgeManager', 'OnJsEvent', JSON.stringify(payload)); } catch (e) {}
+          }
+        }
+
+        var user = { id: 123456789, first_name: 'Test', username: 'tg_mock', language_code: 'en', photo_url: '' };
+        var app = {
+          initData: 'query_id=AAHmock&user=' + encodeURIComponent(JSON.stringify(user)) + '&auth_date=' + Math.floor(Date.now() / 1000) + '&hash=0000000000000000000000000000000000000000000000000000000000000000',
+          initDataUnsafe: { query_id: 'AAHmock', user: user, auth_date: Math.floor(Date.now() / 1000) },
+          version: '9.6',
+          platform: 'mock',
+          colorScheme: 'light',
+          themeParams: { bg_color: '#ffffff', text_color: '#000000', button_color: '#2f6df6', button_text_color: '#ffffff', secondary_bg_color: '#f0f0f0' },
+          isExpanded: true,
+          isFullscreen: false,
+          viewportHeight: typeof window !== 'undefined' ? window.innerHeight : 800,
+          viewportStableHeight: typeof window !== 'undefined' ? window.innerHeight : 800,
+          BackButton: {
+            isVisible: false,
+            show: function () { this.isVisible = true; }, hide: function () { this.isVisible = false; },
+            onClick: function (cb) { on('backButtonClicked', cb); }, offClick: function (cb) { listeners['backButtonClicked'] = []; },
+          },
+          MainButton: {
+            isVisible: false, text: '', color: '#2f6df6', textColor: '#ffffff', isActive: true,
+            setText: function (t) { this.text = t; }, show: function () { this.isVisible = true; },
+            hide: function () { this.isVisible = false; }, enable: function () { this.isActive = true; },
+            disable: function () { this.isActive = false; }, setColor: function (c) { this.color = c; },
+            setTextColor: function (c) { this.textColor = c; },
+            onClick: function (cb) { on('mainButtonClicked', cb); }, offClick: function (cb) { listeners['mainButtonClicked'] = []; },
+          },
+          HapticFeedback: {
+            impactOccurred: function () {}, notificationOccurred: function () {}, selectionChanged: function () {},
+          },
+          CloudStorage: {
+            getItems: function (keys, cb) {
+              setTimeout(function () {
+                var out = {};
+                keys.forEach(function (k) { out[k] = storage[k] !== undefined ? storage[k] : null; });
+                cb(null, out);
+              }, 30);
+            },
+            setItem: function (key, value, cb) {
+              setTimeout(function () {
+                storage[key] = String(value);
+                try { localStorage.setItem('tg_mock_storage', JSON.stringify(storage)); } catch (e) {}
+                cb(null, true);
+              }, 30);
+            },
+            removeItem: function (keys, cb) {
+              setTimeout(function () {
+                keys.forEach(function (k) { delete storage[k]; });
+                try { localStorage.setItem('tg_mock_storage', JSON.stringify(storage)); } catch (e) {}
+                cb(null, true);
+              }, 30);
+            },
+          },
+          ready: function () {},
+          expand: function () { this.isExpanded = true; },
+          requestFullscreen: function () {
+            try { if (document.documentElement.requestFullscreen) document.documentElement.requestFullscreen(); } catch (e) {}
+            this.isFullscreen = true;
+          },
+          exitFullscreen: function () {
+            try { if (document.exitFullscreen) document.exitFullscreen(); } catch (e) {}
+            this.isFullscreen = false;
+          },
+          lockOrientation: function () {}, unlockOrientation: function () {},
+          enableClosingConfirmation: function () {}, disableClosingConfirmation: function () {},
+          setBackgroundColor: function () {}, setHeaderColor: function () {},
+          showAlert: function (msg, cb) { alert('[TG] ' + msg); if (cb) setTimeout(cb, 50); },
+          showConfirm: function (msg, cb) {
+            var ok = confirm('[TG] ' + msg);
+            if (cb) setTimeout(function () { cb(ok); }, 50);
+          },
+          showPopup: function (p, cb) {
+            var ok = confirm('[TG] ' + (p.message || p.title || 'popup'));
+            if (cb) setTimeout(function () { cb({ button_id: ok ? 'ok' : 'cancel' }); }, 50);
+          },
+          openLink: function (url) { window.open(url, '_blank'); },
+          openTelegramLink: function (url) { window.open(url, '_blank'); },
+          openInvoice: function (url, cb) {
+            var paid = confirm('[TG 模拟支付] 点击确定模拟支付成功\n' + url);
+            setTimeout(function () {
+              emit('invoiceClosed', { status: paid ? 'paid' : 'cancelled', slug: '' });
+              if (cb) cb(paid ? 'paid' : 'cancelled');
+            }, 50);
+          },
+          sendData: function (data) { alert('[TG] sendData: ' + data); },
+          close: function () {},
+          isVersionAtLeast: function (v) { return true; },
+          onEvent: function (t, cb) { on(t, cb); },
+          offEvent: function (t, cb) { listeners[t] = []; },
+        };
+
+        // 事件转发（与真机 index.html tgForwardAll 同构）
+        app.onEvent('themeChanged', function () { forward('themeChanged', { colorScheme: app.colorScheme, themeParams: app.themeParams }); });
+        app.onEvent('viewportChanged', function (e) { forward('viewportChanged', { viewportHeight: app.viewportHeight, viewportStableHeight: app.viewportStableHeight, isExpanded: app.isExpanded, isStateStable: !!(e && e.isStateStable) }); });
+        app.onEvent('fullscreenChanged', function (e) { forward('fullscreenChanged', { isFullscreen: !!(e && e.isFullscreen) }); });
+        app.onEvent('backButtonClicked', function () { forward('backButtonClicked'); });
+        app.onEvent('mainButtonClicked', function () { forward('mainButtonClicked'); });
+        app.onEvent('secondaryButtonClicked', function () { forward('secondaryButtonClicked'); });
+        app.onEvent('settingsButtonClicked', function () { forward('settingsButtonClicked'); });
+        app.onEvent('popupClosed', function (e) { forward('popupClosed', { button_id: (e && e.button_id) || '' }); });
+
+        window.TgMockApp = app;
+      })();
+
       // 模板行为默认值（会被一键打包工具生成的 tg-runtime-config.json 覆盖）
       var TG_AUTO_EXPAND = true;          // 引擎加载完后自动 expand() 到最大高度
       var TG_AUTO_FULLSCREEN = false;     // 首次用户点击后进入全屏（沉浸式游戏建议 true）
