@@ -8,9 +8,9 @@
     <script src="https://telegram.org/js/telegram-web-app.js?63"></script>
     <style>
       * { border: 0; margin: 0; padding: 0; }
-      html, body { width: 100%; height: 100%; overflow: hidden; }
+      html, body { width: 100%; height: 100%; overflow: hidden; touch-action: none; }
       #unity-container { position: absolute; inset: 0; }
-      #unity-canvas { width: 100%; height: 100%; display: block; }
+      #unity-canvas { width: 100%; height: 100%; display: block; touch-action: none; }
       #unity-loading-bar {
         position: absolute; left: 50%; top: 50%;
         transform: translate(-50%, -50%);
@@ -180,8 +180,8 @@
         try {
           if (window.Telegram && window.Telegram.WebApp) {
             var app = window.Telegram.WebApp;
+            // 仅有效会话（有 initData）走真实 SDK；无 initData（浏览器调试/VPN 场景）回退 Mock
             if (app.initData && app.initData.length > 0) return app;
-            if (app.version) return app; // 允许 initData 为空时仍走真实 API（受限，纯 UI 测试）
           }
         } catch (e) {}
         if (typeof window !== 'undefined' && window.TgMockApp) return window.TgMockApp;
