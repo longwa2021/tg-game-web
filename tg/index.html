@@ -104,21 +104,23 @@
           CloudStorage: {
             getItems: function (keys, cb) {
               setTimeout(function () {
+                var k = (keys || []).map(String); // 防御：keys 可能不是数组，回调必须始终触发
                 var out = {};
-                keys.forEach(function (k) { out[k] = storage[k] !== undefined ? storage[k] : null; });
+                k.forEach(function (kk) { out[kk] = storage[kk] !== undefined ? storage[kk] : null; });
                 cb(null, out);
               }, 30);
             },
             setItem: function (key, value, cb) {
               setTimeout(function () {
-                storage[key] = String(value);
+                storage[String(key)] = String(value);
                 try { localStorage.setItem('tg_mock_storage', JSON.stringify(storage)); } catch (e) {}
                 cb(null, true);
               }, 30);
             },
             removeItem: function (keys, cb) {
               setTimeout(function () {
-                keys.forEach(function (k) { delete storage[k]; });
+                var k = (keys || []).map(String);
+                k.forEach(function (kk) { delete storage[kk]; });
                 try { localStorage.setItem('tg_mock_storage', JSON.stringify(storage)); } catch (e) {}
                 cb(null, true);
               }, 30);
