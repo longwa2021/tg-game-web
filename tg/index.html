@@ -175,6 +175,24 @@
         window.TgMockApp = app;
       })();
 
+      // jslib 依赖的页面全局函数（Unity jslib 编译器不为库内函数生成定义，必须在此定义，与 gameInstance 同机制）
+      var TgGetApp = function () {
+        try {
+          if (window.Telegram && window.Telegram.WebApp) {
+            var app = window.Telegram.WebApp;
+            if (app.initData && app.initData.length > 0) return app;
+            if (app.version) return app; // 允许 initData 为空时仍走真实 API（受限，纯 UI 测试）
+          }
+        } catch (e) {}
+        if (typeof window !== 'undefined' && window.TgMockApp) return window.TgMockApp;
+        return null;
+      };
+      var TgCloudCbError = function (cbid) {
+        if (typeof gameInstance !== 'undefined' && gameInstance) {
+          gameInstance.SendMessage('TgBridgeManager', 'OnJsEvent', JSON.stringify({ t: 'cloudGetResult', cbid: cbid, d: JSON.stringify({ items: [] }) }));
+        }
+      };
+
       // 模板行为默认值（会被一键打包工具生成的 tg-runtime-config.json 覆盖）
       var TG_AUTO_EXPAND = true;          // 引擎加载完后自动 expand() 到最大高度
       var TG_AUTO_FULLSCREEN = false;     // 首次用户点击后进入全屏（沉浸式游戏建议 true）
