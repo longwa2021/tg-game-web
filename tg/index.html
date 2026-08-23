@@ -239,7 +239,11 @@
           function tryFullscreen() {
             try {
               var app = window.Telegram && window.Telegram.WebApp;
-              if (app && !app.isFullscreen && app.requestFullscreen) app.requestFullscreen();
+              if (app && !app.isFullscreen && app.requestFullscreen) {
+                // requestFullscreen 需要 Bot API 8.0+，旧版本（如 6.0）会抛 "not supported"
+                if (app.isVersionAtLeast && app.isVersionAtLeast('8.0')) app.requestFullscreen();
+                else tgLog('requestFullscreen 需 8.0+（当前 ' + (app.version || '?') + '），已跳过');
+              }
             } catch (e) {}
             window.removeEventListener('pointerdown', tryFullscreen);
             window.removeEventListener('touchstart', tryFullscreen);
