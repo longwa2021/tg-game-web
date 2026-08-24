@@ -195,6 +195,86 @@
         }
       };
 
+      // ---------- 存档存储层（三级：DeviceStorage(9.0+) → CloudStorage(6.9+) → localStorage 兜底/mock） ----------
+      // 官方 API：DeviceStorage 只有单键 getItem/setItem/removeItem/clear；
+      //          CloudStorage 单键 + 多键 getItems/removeItems。
+      // 本层统一以单键循环聚合多键语义；jslib TgCloudGet/Set/Remove 调用本层。
+      var TgStoreBackendLogged = false;
+      var TgStorePick = function (app) {
+        if (app && app.DeviceStorage) return 'device';
+        if (app && app.CloudStorage) return 'cloud';
+        return 'local';
+      };
+      var TgStoreLog = function (backend) {
+        if (!TgStoreBackendLogged) {
+          TgStoreBackendLogged = true;
+          if (window.console) console.log('[TG] store backend: ' + backend);
+        }
+      };
+      var TgStoreGet = function (keys, cb) {
+        var app = TgGetApp();
+        var backend = TgStorePick(app);
+        TgStoreLog(backend);
+        var ks = (keys || []).map(String);
+        if (backend === 'device' || backend === 'cloud') {
+          var store = backend === 'device' ? app.DeviceStorage : app.CloudStorage;
+          if (ks.length === 0) { cb(null, {}); return; }
+          var out = {}; var pending = ks.length; var failed = false;
+          ks.forEach(function (k) {
+            var done = function (err, v) {
+              if (failed) return;
+              if (err) { failed = true; cb(err, null); return; }
+              out[k] = (v === null || v === undefined) ? null : String(v);
+              if (--pending === 0) cb(null, out);
+            };
+            if (store.getItem) store.getItem(k, done);
+            else if (store.getItems) store.getItems([k], function (err, vals) { done(err, vals ? vals[k] : null); });
+            else done('no_get_api');
+          });
+          return;
+        }
+        var res = {};
+        try { ks.forEach(function (k) { res[k] = window.localStorage.getItem('tg_store_' + k); }); } catch (e) {}
+        setTimeout(function () { cb(null, res); }, 0);
+      };
+      var TgStoreSet = function (key, value, cb) {
+        var app = TgGetApp();
+        var backend = TgStorePick(app);
+        TgStoreLog(backend);
+        var k = String(key); var v = String(value);
+        if (backend === 'device' || backend === 'cloud') {
+          var store = backend === 'device' ? app.DeviceStorage : app.CloudStorage;
+          store.setItem(k, v, function (err, ok) { if (cb) cb(err || null, !!ok); });
+          return;
+        }
+        try { window.localStorage.setItem('tg_store_' + k, v); } catch (e) {}
+        if (cb) setTimeout(function () { cb(null, true); }, 0);
+      };
+      var TgStoreRemove = function (keys, cb) {
+        var app = TgGetApp();
+        var backend = TgStorePick(app);
+        TgStoreLog(backend);
+        var ks = (keys || []).map(String);
+        if (backend === 'device' || backend === 'cloud') {
+          var store = backend === 'device' ? app.DeviceStorage : app.CloudStorage;
+          if (ks.length === 0) { if (cb) cb(null, true); return; }
+          var pending = ks.length; var failed = false;
+          ks.forEach(function (k) {
+            var done = function (err) {
+              if (failed) return;
+              if (err) { failed = true; if (cb) cb(err, null); return; }
+              if (--pending === 0 && cb) cb(null, true);
+            };
+            if (store.removeItem) store.removeItem(k, done);
+            else if (store.removeItems) store.removeItems([k], function (err) { done(err); });
+            else done('no_remove_api');
+          });
+          return;
+        }
+        try { ks.forEach(function (k) { window.localStorage.removeItem('tg_store_' + k); }); } catch (e) {}
+        if (cb) setTimeout(function () { cb(null, true); }, 0);
+      };
+
       // 模板行为默认值（会被一键打包工具生成的 tg-runtime-config.json 覆盖）
       var TG_AUTO_EXPAND = true;          // 引擎加载完后自动 expand() 到最大高度
       var TG_AUTO_FULLSCREEN = false;     // 首次用户点击后进入全屏（沉浸式游戏建议 true）
