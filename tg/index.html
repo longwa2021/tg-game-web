@@ -4,6 +4,8 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width,height=device-height,initial-scale=1.0,maximum-scale=1.0,user-scalable=no" />
     <title>Unity WebGL Player | 龙哥的秘密花园_微信小游戏</title>
+    <!-- 构建时注入：window.TG_BUILD_ID / window.TG_RESOURCE_BASE -->
+    <script>window.TG_BUILD_ID="da79dcbe";window.TG_RESOURCE_BASE="https://7072-prod-d3glvsnl0211b1246-1339747589.tcb.qcloud.la";</script>
     <!-- Telegram Mini App SDK：必须放在 head 里其他脚本之前 -->
     <script src="https://telegram.org/js/telegram-web-app.js?63"></script>
     <style>
@@ -187,15 +189,43 @@
       var TgSecureStoreRemove = function (keys, cb) { TgSecureStore.remove(keys, cb); };
 
       // ============ 运行时配置（构建时生成 tg-runtime-config.json） ============
-      var TG_AUTO_EXPAND = true, TG_AUTO_FULLSCREEN = false, TG_DEBUG = false, TG_CONFIG;
+      var TG_BUILD_ID = window.TG_BUILD_ID || '';
+      var TG_RESOURCE_BASE = window.TG_RESOURCE_BASE || '';
+      var TG_V = TG_BUILD_ID ? ('?v=' + TG_BUILD_ID) : '';
+      var TG_AUTO_EXPAND = true, TG_AUTO_FULLSCREEN = false, TG_DEBUG = false, TG_AUTO_RELOAD = true, TG_CONFIG;
       function tgLog() { if (TG_DEBUG && window.console) console.log.apply(console, ['[TG]'].concat([].slice.call(arguments))); }
-      fetch('tg-runtime-config.json').then(function (r) { return r.json(); }).then(function (c) { TG_CONFIG = c; }).catch(function () { TG_CONFIG = null; });
+      fetch('tg-runtime-config.json' + TG_V, { cache: 'no-store' }).then(function (r) { return r.json(); }).then(function (c) { TG_CONFIG = c; }).catch(function () { TG_CONFIG = null; });
       function tgApplyConfig() {
-        if (!TG_CONFIG) return;
-        if (typeof TG_CONFIG.autoExpand === 'boolean') TG_AUTO_EXPAND = TG_CONFIG.autoExpand;
-        if (typeof TG_CONFIG.autoFullscreen === 'boolean') TG_AUTO_FULLSCREEN = TG_CONFIG.autoFullscreen;
-        if (TG_CONFIG.debug) TG_DEBUG = true;
-        if (TG_CONFIG.lockOrientation) { try { var a = window.Telegram && window.Telegram.WebApp; if (a && a.lockOrientation) a.lockOrientation(); } catch (e) {} }
+        if (TG_CONFIG) {
+          if (typeof TG_CONFIG.autoExpand === 'boolean') TG_AUTO_EXPAND = TG_CONFIG.autoExpand;
+          if (typeof TG_CONFIG.autoFullscreen === 'boolean') TG_AUTO_FULLSCREEN = TG_CONFIG.autoFullscreen;
+          if (typeof TG_CONFIG.autoReloadOnUpdate === 'boolean') TG_AUTO_RELOAD = TG_CONFIG.autoReloadOnUpdate;
+          if (TG_CONFIG.buildId) TG_BUILD_ID = TG_CONFIG.buildId;
+          if (TG_CONFIG.resourceBaseUrl) TG_RESOURCE_BASE = TG_CONFIG.resourceBaseUrl;
+          if (TG_CONFIG.debug) TG_DEBUG = true;
+          if (TG_CONFIG.lockOrientation) { try { var a = window.Telegram && window.Telegram.WebApp; if (a && a.lockOrientation) a.lockOrientation(); } catch (e) {} }
+        }
+        tgVersionCheck();
+      }
+      // 资源版本检测：与本地记录比对，变化且开启自动刷新时刷新一次（sessionStorage 防循环）
+      function tgVersionCheck() {
+        var base = TG_RESOURCE_BASE ? TG_RESOURCE_BASE.replace(/\/+$/, '') + '/' : '';
+        fetch(base + 'tg-version.txt', { cache: 'no-store' })
+          .then(function (r) { return r.ok ? r.text() : ''; })
+          .then(function (v) {
+            v = (v || '').trim();
+            if (!v) return;
+            var stored = null; try { stored = localStorage.getItem('tg_build_id'); } catch (e) {}
+            if (stored === v) return;
+            if (!stored) { try { localStorage.setItem('tg_build_id', v); } catch (e) {} return; }
+            if (!TG_AUTO_RELOAD) { tgLog('资源版本变化(' + stored + ' → ' + v + ')，未开启自动刷新'); return; }
+            var guard = null; try { guard = sessionStorage.getItem('tg_reloaded'); } catch (e) {}
+            if (guard === v) return;
+            try { sessionStorage.setItem('tg_reloaded', v); localStorage.setItem('tg_build_id', v); } catch (e) {}
+            tgLog('资源版本变化，刷新页面: ' + stored + ' → ' + v);
+            location.reload();
+          })
+          .catch(function () {});
       }
       function tgWhenReady() {
         tgApplyConfig();
@@ -251,11 +281,11 @@
       }
 
       var buildUrl = 'Build';
-      var loaderUrl = buildUrl + '/TG_WebGL.loader.js';
+      var loaderUrl = buildUrl + '/TG_WebGL.loader.js' + TG_V;
       var config = {
-        dataUrl: buildUrl + '/TG_WebGL.data',
-        frameworkUrl: buildUrl + '/TG_WebGL.framework.js',
-        codeUrl: buildUrl + '/TG_WebGL.wasm',
+        dataUrl: buildUrl + '/TG_WebGL.data.unityweb' + TG_V,
+        frameworkUrl: buildUrl + '/TG_WebGL.framework.js.unityweb' + TG_V,
+        codeUrl: buildUrl + '/TG_WebGL.wasm.unityweb' + TG_V,
         streamingAssetsUrl: 'StreamingAssets',
         companyName: "DefaultCompany",
         productName: "龙哥的秘密花园_微信小游戏",

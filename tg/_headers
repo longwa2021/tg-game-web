@@ -1,0 +1,14 @@
+/Build/*
+  Cache-Control: public, max-age=31536000, immutable
+/index.html
+  Cache-Control: no-cache
+/tg-runtime-config.json
+  Cache-Control: no-cache
+/tg-version.txt
+  Cache-Control: no-cache
+/aa_version.txt
+  Cache-Control: no-cache
+/StreamingAssets/aa/catalog.json
+  Cache-Control: no-cache
+/StreamingAssets/aa/settings.json
+  Cache-Control: no-cache
