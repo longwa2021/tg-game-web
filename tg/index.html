@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width,height=device-height,initial-scale=1.0,maximum-scale=1.0,user-scalable=no" />
     <title>Unity WebGL Player | 龙哥的秘密花园_微信小游戏</title>
     <!-- 构建时注入：window.TG_BUILD_ID / window.TG_RESOURCE_BASE -->
-    <script>window.TG_BUILD_ID="02560c20";window.TG_RESOURCE_BASE="https://7072-prod-d3glvsnl0211b1246-1339747589.tcb.qcloud.la";window.TG_STREAMING_ASSETS_URL="https://7072-prod-d3glvsnl0211b1246-1339747589.tcb.qcloud.la/StreamingAssets";</script>
+    <script>window.TG_BUILD_ID="c9191914";window.TG_RESOURCE_BASE="https://7072-prod-d3glvsnl0211b1246-1339747589.tcb.qcloud.la";window.TG_STREAMING_ASSETS_URL="https://7072-prod-d3glvsnl0211b1246-1339747589.tcb.qcloud.la/StreamingAssets";</script>
     <!-- Telegram Mini App SDK：必须放在 head 里其他脚本之前 -->
     <script src="https://telegram.org/js/telegram-web-app.js?63"></script>
     <style>
@@ -123,12 +123,11 @@
         } catch (e) {}
         return (typeof window !== 'undefined' && window.TgMockApp) ? window.TgMockApp : null;
       };
+      var TG_SEP = '\u001F';
       var TgSend = function (type, cbid, data) {
         if (typeof gameInstance === 'undefined' || !gameInstance) return;
-        var payload = { t: type };
-        if (cbid) payload.cbid = cbid;
-        if (data !== undefined && data !== null) payload.d = JSON.stringify(data);
-        try { gameInstance.SendMessage('TelegramMiniApp', 'OnJsEvent', JSON.stringify(payload)); } catch (e) {}
+        var d = (data !== undefined && data !== null) ? JSON.stringify(data) : '';
+        try { gameInstance.SendMessage('TelegramMiniApp', 'OnJsEvent', type + TG_SEP + (cbid || 0) + TG_SEP + d); } catch (e) {}
       };
       var TgCloudCbError = function (cbid) { TgSend('cloudGetResult', cbid, { items: [] }); };
 
@@ -286,10 +285,16 @@
         //       writeAccessRequested/contactRequested/shareMessage*/emojiStatus*/fileDownloadRequested
         //       由 TgBridge.jslib 的方法回调直接上报（带 cbid），此处不再转发，避免事件重复。
 
-        // 传感器
-        tgOn('accelerometerChanged', function () { TgSend('accelerometerChanged', 0, { x: app.Accelerometer.x, y: app.Accelerometer.y, z: app.Accelerometer.z }); });
-        tgOn('gyroscopeChanged', function () { TgSend('gyroscopeChanged', 0, { x: app.Gyroscope.x, y: app.Gyroscope.y, z: app.Gyroscope.z }); });
-        tgOn('deviceOrientationChanged', function () { TgSend('deviceOrientationChanged', 0, { alpha: app.DeviceOrientation.alpha, beta: app.DeviceOrientation.beta, gamma: app.DeviceOrientation.gamma, absolute: app.DeviceOrientation.absolute }); });
+        // 传感器：高频 Changed 走直连回调（window.TgCallSensor），Failed 仍走 SendMessage
+        function tgSensor(kind, x, y, z, flag) {
+          if (typeof window.TgCallSensor === 'function') { window.TgCallSensor(kind, x, y, z, flag); return; }
+          if (kind === 2) TgSend('deviceOrientationChanged', 0, { alpha: x, beta: y, gamma: z, absolute: !!flag });
+          else if (kind === 1) TgSend('gyroscopeChanged', 0, { x: x, y: y, z: z });
+          else TgSend('accelerometerChanged', 0, { x: x, y: y, z: z });
+        }
+        tgOn('accelerometerChanged', function () { tgSensor(0, app.Accelerometer.x, app.Accelerometer.y, app.Accelerometer.z, 0); });
+        tgOn('gyroscopeChanged', function () { tgSensor(1, app.Gyroscope.x, app.Gyroscope.y, app.Gyroscope.z, 0); });
+        tgOn('deviceOrientationChanged', function () { tgSensor(2, app.DeviceOrientation.alpha, app.DeviceOrientation.beta, app.DeviceOrientation.gamma, app.DeviceOrientation.absolute ? 1 : 0); });
         tgOn('accelerometerFailed', function (e) { TgSend('accelerometerFailed', 0, { error: (e && e.error) || 'UNSUPPORTED' }); });
         tgOn('gyroscopeFailed', function (e) { TgSend('gyroscopeFailed', 0, { error: (e && e.error) || 'UNSUPPORTED' }); });
         tgOn('deviceOrientationFailed', function (e) { TgSend('deviceOrientationFailed', 0, { error: (e && e.error) || 'UNSUPPORTED' }); });
