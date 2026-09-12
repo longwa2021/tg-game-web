@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width,height=device-height,initial-scale=1.0,maximum-scale=1.0,user-scalable=no" />
     <title>Unity WebGL Player | 龙哥的秘密花园_微信小游戏</title>
     <!-- 构建时注入：window.TG_BUILD_ID / window.TG_RESOURCE_BASE -->
-    <script>window.TG_BUILD_ID="e9ced6e6";window.TG_RESOURCE_BASE="https://7072-prod-d3glvsnl0211b1246-1339747589.tcb.qcloud.la";window.TG_STREAMING_ASSETS_URL="https://7072-prod-d3glvsnl0211b1246-1339747589.tcb.qcloud.la/StreamingAssets";</script>
+    <script>window.TG_BUILD_ID="02560c20";window.TG_RESOURCE_BASE="https://7072-prod-d3glvsnl0211b1246-1339747589.tcb.qcloud.la";window.TG_STREAMING_ASSETS_URL="https://7072-prod-d3glvsnl0211b1246-1339747589.tcb.qcloud.la/StreamingAssets";</script>
     <!-- Telegram Mini App SDK：必须放在 head 里其他脚本之前 -->
     <script src="https://telegram.org/js/telegram-web-app.js?63"></script>
     <style>
@@ -264,20 +264,41 @@
       function tgForwardAll() {
         if (!window.Telegram || !window.Telegram.WebApp) return;
         var app = Telegram.WebApp;
-        app.onEvent('themeChanged', function () { try { document.body.style.backgroundColor = app.themeParams.bg_color || '#000000'; } catch (e) {} TgSend('themeChanged', 0, { colorScheme: app.colorScheme, themeParams: app.themeParams }); });
-        app.onEvent('viewportChanged', function (e) { TgSend('viewportChanged', 0, { viewportHeight: app.viewportHeight, viewportStableHeight: app.viewportStableHeight, isExpanded: app.isExpanded, isFullscreen: app.isFullscreen, isActive: app.isActive, isStateStable: !!(e && e.isStateStable) }); });
-        app.onEvent('fullscreenChanged', function (e) { TgSend('fullscreenChanged', 0, { isFullscreen: !!(e && e.isFullscreen) }); });
-        app.onEvent('safeAreaChanged', function () { TgSend('safeAreaChanged', 0, {}); });
-        app.onEvent('contentSafeAreaChanged', function () { TgSend('contentSafeAreaChanged', 0, {}); });
-        app.onEvent('activated', function () { TgSend('activated', 0, {}); });
-        app.onEvent('deactivated', function () { TgSend('deactivated', 0, {}); });
-        app.onEvent('backButtonClicked', function () { TgSend('backButtonClicked', 0); });
-        app.onEvent('mainButtonClicked', function () { TgSend('mainButtonClicked', 0); });
-        app.onEvent('secondaryButtonClicked', function () { TgSend('secondaryButtonClicked', 0); });
-        app.onEvent('settingsButtonClicked', function () { TgSend('settingsButtonClicked', 0); });
-        app.onEvent('accelerometerChanged', function () { TgSend('accelerometerChanged', 0, { x: app.Accelerometer.x, y: app.Accelerometer.y, z: app.Accelerometer.z }); });
-        app.onEvent('gyroscopeChanged', function () { TgSend('gyroscopeChanged', 0, { x: app.Gyroscope.x, y: app.Gyroscope.y, z: app.Gyroscope.z }); });
-        app.onEvent('deviceOrientationChanged', function () { TgSend('deviceOrientationChanged', 0, { alpha: app.DeviceOrientation.alpha, beta: app.DeviceOrientation.beta, gamma: app.DeviceOrientation.gamma, absolute: app.DeviceOrientation.absolute }); });
+        function tgOn(name, fn) { try { app.onEvent(name, fn); } catch (e) {} }
+        function tgPass(name) { tgOn(name, function () { TgSend(name, 0); }); }
+
+        tgOn('themeChanged', function () { try { document.body.style.backgroundColor = app.themeParams.bg_color || '#000000'; } catch (e) {} TgSend('themeChanged', 0, { colorScheme: app.colorScheme, themeParams: app.themeParams }); });
+        tgOn('viewportChanged', function (e) { TgSend('viewportChanged', 0, { viewportHeight: app.viewportHeight, viewportStableHeight: app.viewportStableHeight, isExpanded: app.isExpanded, isFullscreen: app.isFullscreen, isActive: app.isActive, isStateStable: !!(e && e.isStateStable) }); });
+        tgOn('fullscreenChanged', function (e) { TgSend('fullscreenChanged', 0, { isFullscreen: !!(e && e.isFullscreen) }); });
+        tgOn('fullscreenFailed', function (e) { TgSend('fullscreenFailed', 0, { error: (e && e.error) || '' }); });
+        tgPass('safeAreaChanged');
+        tgPass('contentSafeAreaChanged');
+        tgPass('activated');
+        tgPass('deactivated');
+        tgPass('backButtonClicked');
+        tgPass('mainButtonClicked');
+        tgPass('secondaryButtonClicked');
+        tgPass('settingsButtonClicked');
+        tgPass('scanQrPopupClosed');
+        tgPass('homeScreenAdded');
+
+        // 注意：popupClosed/invoiceClosed/qrTextReceived/clipboardTextReceived/homeScreenChecked/
+        //       writeAccessRequested/contactRequested/shareMessage*/emojiStatus*/fileDownloadRequested
+        //       由 TgBridge.jslib 的方法回调直接上报（带 cbid），此处不再转发，避免事件重复。
+
+        // 传感器
+        tgOn('accelerometerChanged', function () { TgSend('accelerometerChanged', 0, { x: app.Accelerometer.x, y: app.Accelerometer.y, z: app.Accelerometer.z }); });
+        tgOn('gyroscopeChanged', function () { TgSend('gyroscopeChanged', 0, { x: app.Gyroscope.x, y: app.Gyroscope.y, z: app.Gyroscope.z }); });
+        tgOn('deviceOrientationChanged', function () { TgSend('deviceOrientationChanged', 0, { alpha: app.DeviceOrientation.alpha, beta: app.DeviceOrientation.beta, gamma: app.DeviceOrientation.gamma, absolute: app.DeviceOrientation.absolute }); });
+        tgOn('accelerometerFailed', function (e) { TgSend('accelerometerFailed', 0, { error: (e && e.error) || 'UNSUPPORTED' }); });
+        tgOn('gyroscopeFailed', function (e) { TgSend('gyroscopeFailed', 0, { error: (e && e.error) || 'UNSUPPORTED' }); });
+        tgOn('deviceOrientationFailed', function (e) { TgSend('deviceOrientationFailed', 0, { error: (e && e.error) || 'UNSUPPORTED' }); });
+
+        // 生物识别 / 定位
+        tgPass('biometricManagerUpdated');
+        tgOn('biometricAuthRequested', function (e) { TgSend('biometricAuthRequested', 0, { isAuthenticated: !!(e && e.isAuthenticated), biometricToken: (e && e.biometricToken) || '' }); });
+        tgPass('locationManagerUpdated');
+        tgOn('locationRequested', function (e) { TgSend('locationRequested', 0, (e && e.locationData) || {}); });
       }
 
       var buildUrl = 'Build';
