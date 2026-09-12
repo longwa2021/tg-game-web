@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width,height=device-height,initial-scale=1.0,maximum-scale=1.0,user-scalable=no" />
     <title>Unity WebGL Player | 龙哥的秘密花园_微信小游戏</title>
     <!-- 构建时注入：window.TG_BUILD_ID / window.TG_RESOURCE_BASE -->
-    <script>window.TG_BUILD_ID="da79dcbe";window.TG_RESOURCE_BASE="https://7072-prod-d3glvsnl0211b1246-1339747589.tcb.qcloud.la";</script>
+    <script>window.TG_BUILD_ID="da79dcbe";window.TG_RESOURCE_BASE="https://7072-prod-d3glvsnl0211b1246-1339747589.tcb.qcloud.la";window.TG_STREAMING_ASSETS_URL="https://7072-prod-d3glvsnl0211b1246-1339747589.tcb.qcloud.la/StreamingAssets";</script>
     <!-- Telegram Mini App SDK：必须放在 head 里其他脚本之前 -->
     <script src="https://telegram.org/js/telegram-web-app.js?63"></script>
     <style>
@@ -286,7 +286,7 @@
         dataUrl: buildUrl + '/TG_WebGL.data.unityweb' + TG_V,
         frameworkUrl: buildUrl + '/TG_WebGL.framework.js.unityweb' + TG_V,
         codeUrl: buildUrl + '/TG_WebGL.wasm.unityweb' + TG_V,
-        streamingAssetsUrl: 'StreamingAssets',
+        streamingAssetsUrl: window.TG_STREAMING_ASSETS_URL || 'StreamingAssets',
         companyName: "DefaultCompany",
         productName: "龙哥的秘密花园_微信小游戏",
         productVersion: "0.1.0",
