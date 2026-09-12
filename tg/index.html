@@ -11,17 +11,13 @@
       html, body { width: 100%; height: 100%; overflow: hidden; touch-action: none; }
       #unity-container { position: absolute; inset: 0; }
       #unity-canvas { width: 100%; height: 100%; display: block; touch-action: none; }
-      #unity-loading-bar {
-        position: absolute; left: 50%; top: 50%;
-        transform: translate(-50%, -50%);
-        width: 240px; display: none;
-      }
+      #unity-loading-bar { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: 240px; display: none; }
       #unity-progress-bar-empty { width: 100%; height: 4px; border-radius: 2px; background: rgba(128,128,128,.35); overflow: hidden; }
       #unity-progress-bar-full { width: 0%; height: 100%; border-radius: 2px; background: #4a9eff; transition: width .2s ease; }
       #unity-warning { display: none; position: absolute; left: 8px; right: 8px; bottom: 8px; font: 13px/1.5 sans-serif; }
     </style>
     <script>
-      // 主题色同步：加载前先铺底色，避免白屏闪烁（head 阶段 body 未解析，操作 documentElement）
+      // 主题色预铺，避免白屏闪烁（head 阶段 body 未解析，操作 documentElement）
       (function () {
         var css = ['background-color: #000000', 'color: #ffffff'];
         try {
@@ -40,292 +36,178 @@
   <body>
     <div id="unity-container">
       <canvas id="unity-canvas" width=960 height=600 tabindex="-1"></canvas>
-      <div id="unity-loading-bar">
-        <div id="unity-progress-bar-empty">
-          <div id="unity-progress-bar-full"></div>
-        </div>
-      </div>
+      <div id="unity-loading-bar"><div id="unity-progress-bar-empty"><div id="unity-progress-bar-full"></div></div></div>
       <div id="unity-warning"></div>
     </div>
     <script>
-      // Mock：非 Telegram 环境（浏览器调试）模拟 Telegram.WebApp，供 TgBridge.jslib 使用
+      // ============ 通用 Mock（浏览器调试）：非 Telegram 环境模拟 WebApp ============
       (function () {
-        try {
-          if (window.Telegram && window.Telegram.WebApp && window.Telegram.WebApp.initData) return; // 真机环境
-        } catch (e) {}
+        try { if (window.Telegram && window.Telegram.WebApp && window.Telegram.WebApp.initData) return; } catch (e) {}
         if (window.TgMockApp) return;
 
         var listeners = {};
         var storage = {};
-        try {
-          if (typeof localStorage !== 'undefined') storage = JSON.parse(localStorage.getItem('tg_mock_storage') || '{}');
-        } catch (e) { storage = {}; }
-
-        function on(type, cb) { (listeners[type] = listeners[type] || []).push(cb); }
-        function emit(type, data) {
-          (listeners[type] || []).slice().forEach(function (cb) { try { cb(data); } catch (e) {} });
-        }
-        function forward(type, data) {
-          if (typeof gameInstance !== 'undefined' && gameInstance) {
-            var payload = { t: type };
-            if (data !== undefined && data !== null) payload.d = JSON.stringify(data);
-            try { gameInstance.SendMessage('TgBridgeManager', 'OnJsEvent', JSON.stringify(payload)); } catch (e) {}
-          }
-        }
+        try { if (typeof localStorage !== 'undefined') storage = JSON.parse(localStorage.getItem('tg_mock_storage') || '{}'); } catch (e) { storage = {}; }
+        function on(t, cb) { (listeners[t] = listeners[t] || []).push(cb); }
+        function emit(t, d) { (listeners[t] || []).slice().forEach(function (cb) { try { cb(d); } catch (e) {} }); }
+        function persist() { try { localStorage.setItem('tg_mock_storage', JSON.stringify(storage)); } catch (e) {} }
 
         var user = { id: 123456789, first_name: 'Test', username: 'tg_mock', language_code: 'en', photo_url: '' };
         var app = {
           initData: 'query_id=AAHmock&user=' + encodeURIComponent(JSON.stringify(user)) + '&auth_date=' + Math.floor(Date.now() / 1000) + '&hash=0000000000000000000000000000000000000000000000000000000000000000',
           initDataUnsafe: { query_id: 'AAHmock', user: user, auth_date: Math.floor(Date.now() / 1000) },
-          version: '9.6',
-          platform: 'mock',
-          colorScheme: 'light',
+          version: '9.6', platform: 'mock', colorScheme: 'light',
           themeParams: { bg_color: '#ffffff', text_color: '#000000', button_color: '#2f6df6', button_text_color: '#ffffff', secondary_bg_color: '#f0f0f0' },
-          isExpanded: true,
-          isFullscreen: false,
-          viewportHeight: typeof window !== 'undefined' ? window.innerHeight : 800,
-          viewportStableHeight: typeof window !== 'undefined' ? window.innerHeight : 800,
-          BackButton: {
-            isVisible: false,
-            show: function () { this.isVisible = true; }, hide: function () { this.isVisible = false; },
-            onClick: function (cb) { on('backButtonClicked', cb); }, offClick: function (cb) { listeners['backButtonClicked'] = []; },
-          },
-          MainButton: {
-            isVisible: false, text: '', color: '#2f6df6', textColor: '#ffffff', isActive: true,
-            setText: function (t) { this.text = t; }, show: function () { this.isVisible = true; },
-            hide: function () { this.isVisible = false; }, enable: function () { this.isActive = true; },
-            disable: function () { this.isActive = false; }, setColor: function (c) { this.color = c; },
-            setTextColor: function (c) { this.textColor = c; },
-            onClick: function (cb) { on('mainButtonClicked', cb); }, offClick: function (cb) { listeners['mainButtonClicked'] = []; },
-          },
-          HapticFeedback: {
-            impactOccurred: function () {}, notificationOccurred: function () {}, selectionChanged: function () {},
-          },
+          isExpanded: true, isFullscreen: false, isActive: true,
+          viewportHeight: window.innerHeight, viewportStableHeight: window.innerHeight,
+          BackButton: { isVisible: false, show: function () { this.isVisible = true; }, hide: function () { this.isVisible = false; }, onClick: function (cb) { on('backButtonClicked', cb); }, offClick: function () { listeners['backButtonClicked'] = []; } },
+          MainButton: { isVisible: false, text: '', color: '#2f6df6', textColor: '#ffffff', isActive: true, setText: function (t) { this.text = t; }, show: function () { this.isVisible = true; }, hide: function () { this.isVisible = false; }, enable: function () { this.isActive = true; }, disable: function () { this.isActive = false; }, setColor: function (c) { this.color = c; }, setTextColor: function (c) { this.textColor = c; }, onClick: function (cb) { on('mainButtonClicked', cb); }, offClick: function () { listeners['mainButtonClicked'] = []; } },
+          SecondaryButton: { isVisible: false, text: '', setText: function (t) { this.text = t; }, show: function () { this.isVisible = true; }, hide: function () { this.isVisible = false; }, enable: function () {}, disable: function () {}, setColor: function () {}, setTextColor: function () {}, onClick: function (cb) { on('secondaryButtonClicked', cb); }, offClick: function () {} },
+          HapticFeedback: { impactOccurred: function () {}, notificationOccurred: function () {}, selectionChanged: function () {} },
           CloudStorage: {
-            getItems: function (keys, cb) {
-              setTimeout(function () {
-                var k = (keys || []).map(String); // 防御：keys 可能不是数组，回调必须始终触发
-                var out = {};
-                k.forEach(function (kk) { out[kk] = storage[kk] !== undefined ? storage[kk] : null; });
-                cb(null, out);
-              }, 30);
-            },
-            setItem: function (key, value, cb) {
-              setTimeout(function () {
-                storage[String(key)] = String(value);
-                try { localStorage.setItem('tg_mock_storage', JSON.stringify(storage)); } catch (e) {}
-                cb(null, true);
-              }, 30);
-            },
-            removeItem: function (keys, cb) {
-              setTimeout(function () {
-                var k = (keys || []).map(String);
-                k.forEach(function (kk) { delete storage[kk]; });
-                try { localStorage.setItem('tg_mock_storage', JSON.stringify(storage)); } catch (e) {}
-                cb(null, true);
-              }, 30);
-            },
+            getItem: function (k, cb) { setTimeout(function () { cb(null, storage[String(k)] !== undefined ? storage[String(k)] : null); }, 20); },
+            setItem: function (k, v, cb) { setTimeout(function () { storage[String(k)] = String(v); persist(); cb(null, true); }, 20); },
+            removeItem: function (k, cb) { setTimeout(function () { delete storage[String(k)]; persist(); cb(null, true); }, 20); },
           },
-          ready: function () {},
-          expand: function () { this.isExpanded = true; },
-          requestFullscreen: function () {
-            try { if (document.documentElement.requestFullscreen) document.documentElement.requestFullscreen(); } catch (e) {}
-            this.isFullscreen = true;
+          DeviceStorage: {
+            getItem: function (k, cb) { setTimeout(function () { cb(null, storage['d_' + String(k)] !== undefined ? storage['d_' + String(k)] : null); }, 20); },
+            setItem: function (k, v, cb) { setTimeout(function () { storage['d_' + String(k)] = String(v); persist(); cb(null, true); }, 20); },
+            removeItem: function (k, cb) { setTimeout(function () { delete storage['d_' + String(k)]; persist(); cb(null, true); }, 20); },
           },
-          exitFullscreen: function () {
-            try { if (document.exitFullscreen) document.exitFullscreen(); } catch (e) {}
-            this.isFullscreen = false;
+          SecureStorage: {
+            getItem: function (k, cb) { setTimeout(function () { cb(null, storage['s_' + String(k)] !== undefined ? storage['s_' + String(k)] : null); }, 20); },
+            setItem: function (k, v, cb) { setTimeout(function () { storage['s_' + String(k)] = String(v); persist(); cb(null, true); }, 20); },
+            removeItem: function (k, cb) { setTimeout(function () { delete storage['s_' + String(k)]; persist(); cb(null, true); }, 20); },
           },
+          ready: function () {}, expand: function () { this.isExpanded = true; },
+          requestFullscreen: function () { try { document.documentElement.requestFullscreen(); } catch (e) {} this.isFullscreen = true; },
+          exitFullscreen: function () { try { document.exitFullscreen(); } catch (e) {} this.isFullscreen = false; },
           lockOrientation: function () {}, unlockOrientation: function () {},
           enableClosingConfirmation: function () {}, disableClosingConfirmation: function () {},
-          setBackgroundColor: function () {}, setHeaderColor: function () {},
-          showAlert: function (msg, cb) { alert('[TG] ' + msg); if (cb) setTimeout(cb, 50); },
-          showConfirm: function (msg, cb) {
-            var ok = confirm('[TG] ' + msg);
-            if (cb) setTimeout(function () { cb(ok); }, 50);
-          },
-          showPopup: function (p, cb) {
-            var ok = confirm('[TG] ' + (p.message || p.title || 'popup'));
-            if (cb) setTimeout(function () { cb({ button_id: ok ? 'ok' : 'cancel' }); }, 50);
-          },
-          openLink: function (url) { window.open(url, '_blank'); },
-          openTelegramLink: function (url) { window.open(url, '_blank'); },
-          openInvoice: function (url, cb) {
-            var paid = confirm('[TG 模拟支付] 点击确定模拟支付成功\n' + url);
-            setTimeout(function () {
-              emit('invoiceClosed', { status: paid ? 'paid' : 'cancelled', slug: '' });
-              if (cb) cb(paid ? 'paid' : 'cancelled');
-            }, 50);
-          },
-          sendData: function (data) { alert('[TG] sendData: ' + data); },
-          close: function () {},
-          isVersionAtLeast: function (v) { return true; },
-          onEvent: function (t, cb) { on(t, cb); },
-          offEvent: function (t, cb) { listeners[t] = []; },
+          enableVerticalSwipes: function () {}, disableVerticalSwipes: function () {},
+          hideKeyboard: function () {}, setBackgroundColor: function () {}, setHeaderColor: function () {}, setBottomBarColor: function () {},
+          showAlert: function (m, cb) { alert('[TG] ' + m); if (cb) setTimeout(cb, 40); },
+          showConfirm: function (m, cb) { var ok = confirm('[TG] ' + m); if (cb) setTimeout(function () { cb(ok); }, 40); },
+          showPopup: function (p, cb) { var ok = confirm('[TG] ' + (p.message || p.title || '')); if (cb) setTimeout(function () { cb({ button_id: ok ? 'ok' : 'cancel' }); }, 40); },
+          showScanQrPopup: function (p, cb) { var t = prompt('[TG] QR text', 'mock-qr'); if (cb && t) setTimeout(function () { cb(t); }, 40); },
+          closeScanQrPopup: function () {}, readTextFromClipboard: function (cb) { if (cb) setTimeout(function () { cb(''); }, 40); },
+          openLink: function (u) { window.open(u, '_blank'); }, openTelegramLink: function (u) { window.open(u, '_blank'); },
+          openInvoice: function (u, cb) { var paid = confirm('[TG 模拟支付]\n' + u); if (cb) setTimeout(function () { cb(paid ? 'paid' : 'cancelled'); }, 40); },
+          sendData: function (d) { alert('[TG] sendData: ' + d); }, close: function () {},
+          isVersionAtLeast: function () { return true; },
+          addToHomeScreen: function (cb) { if (cb) setTimeout(cb, 40); }, checkHomeScreenStatus: function (cb) { if (cb) setTimeout(function () { cb('unknown'); }, 40); },
+          requestWriteAccess: function (cb) { if (cb) setTimeout(function () { cb(true); }, 40); }, requestContact: function (cb) { if (cb) setTimeout(function () { cb(true); }, 40); },
+          setEmojiStatus: function (e, p, cb) { if (cb) setTimeout(function () { cb(true); }, 40); }, requestEmojiStatusAccess: function (cb) { if (cb) setTimeout(function () { cb(true); }, 40); },
+          downloadFile: function (p, cb) { if (cb) setTimeout(function () { cb(true); }, 40); },
+          shareMessage: function (id, cb) { if (cb) setTimeout(function () { cb(true); }, 40); }, shareToStory: function () {},
+          switchInlineQuery: function () {},
+          BiometricManager: { isInited: false, isBiometricAvailable: false, biometricType: 'unknown', isAccessRequested: false, isAccessGranted: false, isBiometricTokenSaved: false, init: function (cb) { this.isInited = true; if (cb) setTimeout(cb, 20); }, requestAccess: function (p, cb) { if (cb) setTimeout(function () { cb(true); }, 20); }, authenticate: function (p, cb) { if (cb) setTimeout(function () { cb('authorized'); }, 20); }, updateBiometricToken: function (t, cb) { if (cb) setTimeout(function () { cb(true); }, 20); }, openSettings: function () {} },
+          LocationManager: { isInited: false, isLocationAvailable: false, isAccessRequested: false, isAccessGranted: false, init: function (cb) { this.isInited = true; if (cb) setTimeout(cb, 20); }, getLocation: function (cb) { if (cb) setTimeout(function () { cb({ latitude: 0, longitude: 0 }); }, 20); }, openSettings: function () {} },
+          Accelerometer: { isStarted: false, x: 0, y: 0, z: 0, start: function (p, cb) { this.isStarted = true; if (cb) setTimeout(function () { cb(true); }, 20); }, stop: function (cb) { this.isStarted = false; if (cb) setTimeout(function () { cb(false); }, 20); } },
+          Gyroscope: { isStarted: false, x: 0, y: 0, z: 0, start: function (p, cb) { this.isStarted = true; if (cb) setTimeout(function () { cb(true); }, 20); }, stop: function (cb) { this.isStarted = false; if (cb) setTimeout(function () { cb(false); }, 20); } },
+          DeviceOrientation: { isStarted: false, alpha: 0, beta: 0, gamma: 0, absolute: false, start: function (p, cb) { this.isStarted = true; if (cb) setTimeout(function () { cb(true); }, 20); }, stop: function (cb) { this.isStarted = false; if (cb) setTimeout(function () { cb(false); }, 20); } },
+          onEvent: function (t, cb) { on(t, cb); }, offEvent: function (t) { listeners[t] = []; },
         };
-
-        // 事件转发（与真机 index.html tgForwardAll 同构）
-        app.onEvent('themeChanged', function () { forward('themeChanged', { colorScheme: app.colorScheme, themeParams: app.themeParams }); });
-        app.onEvent('viewportChanged', function (e) { forward('viewportChanged', { viewportHeight: app.viewportHeight, viewportStableHeight: app.viewportStableHeight, isExpanded: app.isExpanded, isStateStable: !!(e && e.isStateStable) }); });
-        app.onEvent('fullscreenChanged', function (e) { forward('fullscreenChanged', { isFullscreen: !!(e && e.isFullscreen) }); });
-        app.onEvent('backButtonClicked', function () { forward('backButtonClicked'); });
-        app.onEvent('mainButtonClicked', function () { forward('mainButtonClicked'); });
-        app.onEvent('secondaryButtonClicked', function () { forward('secondaryButtonClicked'); });
-        app.onEvent('settingsButtonClicked', function () { forward('settingsButtonClicked'); });
-        app.onEvent('popupClosed', function (e) { forward('popupClosed', { button_id: (e && e.button_id) || '' }); });
-
         window.TgMockApp = app;
       })();
 
-      // jslib 依赖的页面全局函数（Unity jslib 编译器不为库内函数生成定义，必须在此定义，与 gameInstance 同机制）
+      // ============ jslib 依赖的页面全局 ============
       var TgGetApp = function () {
         try {
           if (window.Telegram && window.Telegram.WebApp) {
             var app = window.Telegram.WebApp;
-            // 仅有效会话（有 initData）走真实 SDK；无 initData（浏览器调试/VPN 场景）回退 Mock
             if (app.initData && app.initData.length > 0) return app;
           }
         } catch (e) {}
-        if (typeof window !== 'undefined' && window.TgMockApp) return window.TgMockApp;
-        return null;
+        return (typeof window !== 'undefined' && window.TgMockApp) ? window.TgMockApp : null;
       };
-      var TgCloudCbError = function (cbid) {
-        if (typeof gameInstance !== 'undefined' && gameInstance) {
-          gameInstance.SendMessage('TgBridgeManager', 'OnJsEvent', JSON.stringify({ t: 'cloudGetResult', cbid: cbid, d: JSON.stringify({ items: [] }) }));
-        }
+      var TgSend = function (type, cbid, data) {
+        if (typeof gameInstance === 'undefined' || !gameInstance) return;
+        var payload = { t: type };
+        if (cbid) payload.cbid = cbid;
+        if (data !== undefined && data !== null) payload.d = JSON.stringify(data);
+        try { gameInstance.SendMessage('TelegramMiniApp', 'OnJsEvent', JSON.stringify(payload)); } catch (e) {}
       };
+      var TgCloudCbError = function (cbid) { TgSend('cloudGetResult', cbid, { items: [] }); };
 
-      // ---------- 存档存储层（三级：DeviceStorage(9.0+) → CloudStorage(6.9+) → localStorage 兜底/mock） ----------
-      // 官方 API：DeviceStorage 只有单键 getItem/setItem/removeItem/clear；
-      //          CloudStorage 单键 + 多键 getItems/removeItems。
-      // 本层统一以单键循环聚合多键语义；jslib TgCloudGet/Set/Remove 调用本层。
-      var TgStoreBackendLogged = false;
-      var TgStorePick = function (app) {
-        if (app && app.DeviceStorage) return 'device';
-        if (app && app.CloudStorage) return 'cloud';
-        return 'local';
-      };
-      var TgStoreLog = function (backend) {
-        if (!TgStoreBackendLogged) {
-          TgStoreBackendLogged = true;
-          if (window.console) console.log('[TG] store backend: ' + backend);
-        }
-      };
-      var TgStoreGet = function (keys, cb) {
-        var app = TgGetApp();
-        var backend = TgStorePick(app);
-        TgStoreLog(backend);
-        var ks = (keys || []).map(String);
-        if (backend === 'device' || backend === 'cloud') {
-          var store = backend === 'device' ? app.DeviceStorage : app.CloudStorage;
-          if (ks.length === 0) { cb(null, {}); return; }
-          var out = {}; var pending = ks.length; var failed = false;
-          ks.forEach(function (k) {
-            var done = function (err, v) {
-              if (failed) return;
-              if (err) { failed = true; cb(err, null); return; }
-              out[k] = (v === null || v === undefined) ? null : String(v);
-              if (--pending === 0) cb(null, out);
-            };
-            if (store.getItem) store.getItem(k, done);
-            else if (store.getItems) store.getItems([k], function (err, vals) { done(err, vals ? vals[k] : null); });
-            else done('no_get_api');
-          });
-          return;
-        }
-        var res = {};
-        try { ks.forEach(function (k) { res[k] = window.localStorage.getItem('tg_store_' + k); }); } catch (e) {}
-        setTimeout(function () { cb(null, res); }, 0);
-      };
-      var TgStoreSet = function (key, value, cb) {
-        var app = TgGetApp();
-        var backend = TgStorePick(app);
-        TgStoreLog(backend);
-        var k = String(key); var v = String(value);
-        if (backend === 'device' || backend === 'cloud') {
-          var store = backend === 'device' ? app.DeviceStorage : app.CloudStorage;
-          store.setItem(k, v, function (err, ok) { if (cb) cb(err || null, !!ok); });
-          return;
-        }
-        try { window.localStorage.setItem('tg_store_' + k, v); } catch (e) {}
-        if (cb) setTimeout(function () { cb(null, true); }, 0);
-      };
-      var TgStoreRemove = function (keys, cb) {
-        var app = TgGetApp();
-        var backend = TgStorePick(app);
-        TgStoreLog(backend);
-        var ks = (keys || []).map(String);
-        if (backend === 'device' || backend === 'cloud') {
-          var store = backend === 'device' ? app.DeviceStorage : app.CloudStorage;
-          if (ks.length === 0) { if (cb) cb(null, true); return; }
-          var pending = ks.length; var failed = false;
-          ks.forEach(function (k) {
-            var done = function (err) {
-              if (failed) return;
-              if (err) { failed = true; if (cb) cb(err, null); return; }
-              if (--pending === 0 && cb) cb(null, true);
-            };
-            if (store.removeItem) store.removeItem(k, done);
-            else if (store.removeItems) store.removeItems([k], function (err) { done(err); });
-            else done('no_remove_api');
-          });
-          return;
-        }
-        try { ks.forEach(function (k) { window.localStorage.removeItem('tg_store_' + k); }); } catch (e) {}
-        if (cb) setTimeout(function () { cb(null, true); }, 0);
-      };
-
-      // 模板行为默认值（会被一键打包工具生成的 tg-runtime-config.json 覆盖）
-      var TG_AUTO_EXPAND = true;          // 引擎加载完后自动 expand() 到最大高度
-      var TG_AUTO_FULLSCREEN = false;     // 首次用户点击后进入全屏（沉浸式游戏建议 true）
-      var TG_DEBUG = false;
-
-      function tgLog() {
-        if (TG_DEBUG && window.console) console.log.apply(console, ['[TG]'].concat([].slice.call(arguments)));
+      // ---------- 存储层：CloudStorage / DeviceStorage / SecureStorage 单键聚合 ----------
+      function tgStoreAdapter(pick) {
+        return {
+          get: function (keys, cb) {
+            var app = TgGetApp();
+            var store = app && pick(app);
+            var ks = (keys || []).map(String);
+            if (!store || !store.getItem) { var out = {}; ks.forEach(function (k) { out[k] = null; }); cb(null, out); return; }
+            if (ks.length === 0) { cb(null, {}); return; }
+            var res = {}, pending = ks.length, failed = false;
+            ks.forEach(function (k) {
+              store.getItem(k, function (err, v) {
+                if (failed) return;
+                if (err) { failed = true; cb(err, null); return; }
+                res[k] = (v === null || v === undefined) ? null : String(v);
+                if (--pending === 0) cb(null, res);
+              });
+            });
+          },
+          set: function (key, value, cb) {
+            var app = TgGetApp();
+            var store = app && pick(app);
+            if (!store || !store.setItem) { cb && cb('no_store'); return; }
+            store.setItem(String(key), String(value), function (err, ok) { cb && cb(err || null, !!ok); });
+          },
+          remove: function (keys, cb) {
+            var app = TgGetApp();
+            var store = app && pick(app);
+            var ks = (keys || []).map(String);
+            if (!store || !store.removeItem) { cb && cb('no_store'); return; }
+            if (ks.length === 0) { cb && cb(null, true); return; }
+            var pending = ks.length, failed = false;
+            ks.forEach(function (k) {
+              store.removeItem(k, function (err) {
+                if (failed) return;
+                if (err) { failed = true; cb && cb(err, null); return; }
+                if (--pending === 0 && cb) cb(null, true);
+              });
+            });
+          },
+        };
       }
+      var TgCloudStore = tgStoreAdapter(function (app) { return app.CloudStorage; });
+      var TgDeviceStore = tgStoreAdapter(function (app) { return app.DeviceStorage; });
+      var TgSecureStore = tgStoreAdapter(function (app) { return app.SecureStorage; });
 
-      // 运行时配置：一键打包工具生成 tg-runtime-config.json；缺失时用上方默认值
-      var TG_CONFIG = undefined;
-      fetch('tg-runtime-config.json').then(function (r) { return r.json(); })
-        .then(function (c) { TG_CONFIG = c; })
-        .catch(function () { TG_CONFIG = null; });
+      var TgStoreGet = function (keys, cb) { TgCloudStore.get(keys, cb); };
+      var TgStoreSet = function (key, value, cb) { TgCloudStore.set(key, value, cb); };
+      var TgStoreRemove = function (keys, cb) { TgCloudStore.remove(keys, cb); };
+      var TgDeviceStoreGet = function (keys, cb) { TgDeviceStore.get(keys, cb); };
+      var TgDeviceStoreSet = function (key, value, cb) { TgDeviceStore.set(key, value, cb); };
+      var TgDeviceStoreRemove = function (keys, cb) { TgDeviceStore.remove(keys, cb); };
+      var TgSecureStoreGet = function (keys, cb) { TgSecureStore.get(keys, cb); };
+      var TgSecureStoreSet = function (key, value, cb) { TgSecureStore.set(key, value, cb); };
+      var TgSecureStoreRemove = function (keys, cb) { TgSecureStore.remove(keys, cb); };
 
+      // ============ 运行时配置（构建时生成 tg-runtime-config.json） ============
+      var TG_AUTO_EXPAND = true, TG_AUTO_FULLSCREEN = false, TG_DEBUG = false, TG_CONFIG;
+      function tgLog() { if (TG_DEBUG && window.console) console.log.apply(console, ['[TG]'].concat([].slice.call(arguments))); }
+      fetch('tg-runtime-config.json').then(function (r) { return r.json(); }).then(function (c) { TG_CONFIG = c; }).catch(function () { TG_CONFIG = null; });
       function tgApplyConfig() {
         if (!TG_CONFIG) return;
         if (typeof TG_CONFIG.autoExpand === 'boolean') TG_AUTO_EXPAND = TG_CONFIG.autoExpand;
         if (typeof TG_CONFIG.autoFullscreen === 'boolean') TG_AUTO_FULLSCREEN = TG_CONFIG.autoFullscreen;
         if (TG_CONFIG.debug) TG_DEBUG = true;
-        if (TG_CONFIG.lockOrientation) {
-          try {
-            var a = window.Telegram && window.Telegram.WebApp;
-            if (a && a.lockOrientation) a.lockOrientation();
-            tgLog('orientation locked: ' + TG_CONFIG.lockOrientation);
-          } catch (e) {}
-        }
+        if (TG_CONFIG.lockOrientation) { try { var a = window.Telegram && window.Telegram.WebApp; if (a && a.lockOrientation) a.lockOrientation(); } catch (e) {} }
       }
-
-      // 等配置就绪（最长 3s）再 ready/expand，避免配置晚到导致行为丢失
       function tgWhenReady() {
         tgApplyConfig();
         try {
           var app = window.Telegram && window.Telegram.WebApp;
-          if (app) {
-            app.ready(); // 隐藏 Telegram 加载占位符（必须调用）
-            if (TG_AUTO_EXPAND && !app.isExpanded) app.expand();
-            tgLog('ready + expand done (expand=' + TG_AUTO_EXPAND + ', fullscreen=' + TG_AUTO_FULLSCREEN + ')');
-          }
-        } catch (e) {
-          tgLog('ready/expand failed', e);
-        }
+          if (app) { app.ready(); if (TG_AUTO_EXPAND && !app.isExpanded) app.expand(); }
+        } catch (e) { tgLog('ready/expand failed', e); }
         if (TG_AUTO_FULLSCREEN) {
           function tryFullscreen() {
             try {
               var app = window.Telegram && window.Telegram.WebApp;
-              if (app && !app.isFullscreen && app.requestFullscreen) {
-                // requestFullscreen 需要 Bot API 8.0+，旧版本（如 6.0）会抛 "not supported"
-                if (app.isVersionAtLeast && app.isVersionAtLeast('8.0')) app.requestFullscreen();
-                else tgLog('requestFullscreen 需 8.0+（当前 ' + (app.version || '?') + '），已跳过');
-              }
+              if (app && !app.isFullscreen && app.requestFullscreen && app.isVersionAtLeast && app.isVersionAtLeast('8.0')) app.requestFullscreen();
             } catch (e) {}
             window.removeEventListener('pointerdown', tryFullscreen);
             window.removeEventListener('touchstart', tryFullscreen);
@@ -334,83 +216,38 @@
           window.addEventListener('touchstart', tryFullscreen);
         }
       }
-
       var tgConfigTries = 0;
-      (function tgWaitConfig() {
-        tgConfigTries++;
-        if (TG_CONFIG !== undefined || tgConfigTries > 30) { tgWhenReady(); return; }
-        setTimeout(tgWaitConfig, 100);
-      })();
+      (function tgWaitConfig() { tgConfigTries++; if (TG_CONFIG !== undefined || tgConfigTries > 30) { tgWhenReady(); return; } setTimeout(tgWaitConfig, 100); })();
 
+      // ============ Unity 加载 ============
       var gameInstance = null;
-      var container = document.querySelector('#unity-container');
       var canvas = document.querySelector('#unity-canvas');
       var loadingBar = document.querySelector('#unity-loading-bar');
       var progressBarFull = document.querySelector('#unity-progress-bar-full');
       var warningBanner = document.querySelector('#unity-warning');
-
       function unityShowBanner(msg, type) {
-        function updateBannerVisibility() {
-          warningBanner.style.display = warningBanner.children.length ? 'block' : 'none';
-        }
-        var div = document.createElement('div');
-        div.innerHTML = msg;
-        warningBanner.appendChild(div);
+        var div = document.createElement('div'); div.innerHTML = msg; warningBanner.appendChild(div);
         if (type == 'error') div.style = 'background: red; padding: 10px;';
-        else {
-          if (type == 'warning') div.style = 'background: yellow; padding: 10px;';
-          setTimeout(function () { warningBanner.removeChild(div); updateBannerVisibility(); }, 5000);
-        }
-        updateBannerVisibility();
+        else { if (type == 'warning') div.style = 'background: yellow; padding: 10px;'; setTimeout(function () { warningBanner.removeChild(div); warningBanner.style.display = warningBanner.children.length ? 'block' : 'none'; }, 5000); }
+        warningBanner.style.display = warningBanner.children.length ? 'block' : 'none';
       }
-
-      // 事件转发到 Unity（TgBridgeEvents.OnJsEvent；d 必须是 JSON 字符串）
-      function tgForward(type, data) {
-        if (!gameInstance) return;
-        var payload = { t: type };
-        if (data !== undefined && data !== null) payload.d = JSON.stringify(data);
-        try {
-          gameInstance.SendMessage('TgBridgeManager', 'OnJsEvent', JSON.stringify(payload));
-        } catch (e) {
-          tgLog('SendMessage failed', e);
-        }
-      }
-
       function tgForwardAll() {
         if (!window.Telegram || !window.Telegram.WebApp) return;
         var app = Telegram.WebApp;
-        app.onEvent('themeChanged', function () {
-          try { document.body.style.backgroundColor = app.themeParams.bg_color || '#000000'; } catch (e) {}
-          tgForward('themeChanged', {
-            colorScheme: app.colorScheme,
-            themeParams: app.themeParams,
-          });
-        });
-        app.onEvent('viewportChanged', function (e) {
-          tgForward('viewportChanged', {
-            viewportHeight: app.viewportHeight,
-            viewportStableHeight: app.viewportStableHeight,
-            isExpanded: app.isExpanded,
-            isStateStable: !!(e && e.isStateStable),
-          });
-        });
-        app.onEvent('fullscreenChanged', function (e) {
-          tgForward('fullscreenChanged', { isFullscreen: !!(e && e.isFullscreen) });
-        });
-        app.onEvent('backButtonClicked', function () { tgForward('backButtonClicked'); });
-        app.onEvent('mainButtonClicked', function () { tgForward('mainButtonClicked'); });
-        app.onEvent('secondaryButtonClicked', function () { tgForward('secondaryButtonClicked'); });
-        app.onEvent('settingsButtonClicked', function () { tgForward('settingsButtonClicked'); });
-        app.onEvent('popupClosed', function (e) {
-          tgForward('popupClosed', { button_id: (e && e.button_id) || '' });
-        });
-        app.onEvent('invoiceClosed', function (e) {
-          tgForward('invoiceClosed', {
-            status: (e && e.status) || '',
-            slug: (e && e.slug) || '',
-          });
-        });
-        tgLog('event listeners registered');
+        app.onEvent('themeChanged', function () { try { document.body.style.backgroundColor = app.themeParams.bg_color || '#000000'; } catch (e) {} TgSend('themeChanged', 0, { colorScheme: app.colorScheme, themeParams: app.themeParams }); });
+        app.onEvent('viewportChanged', function (e) { TgSend('viewportChanged', 0, { viewportHeight: app.viewportHeight, viewportStableHeight: app.viewportStableHeight, isExpanded: app.isExpanded, isFullscreen: app.isFullscreen, isActive: app.isActive, isStateStable: !!(e && e.isStateStable) }); });
+        app.onEvent('fullscreenChanged', function (e) { TgSend('fullscreenChanged', 0, { isFullscreen: !!(e && e.isFullscreen) }); });
+        app.onEvent('safeAreaChanged', function () { TgSend('safeAreaChanged', 0, {}); });
+        app.onEvent('contentSafeAreaChanged', function () { TgSend('contentSafeAreaChanged', 0, {}); });
+        app.onEvent('activated', function () { TgSend('activated', 0, {}); });
+        app.onEvent('deactivated', function () { TgSend('deactivated', 0, {}); });
+        app.onEvent('backButtonClicked', function () { TgSend('backButtonClicked', 0); });
+        app.onEvent('mainButtonClicked', function () { TgSend('mainButtonClicked', 0); });
+        app.onEvent('secondaryButtonClicked', function () { TgSend('secondaryButtonClicked', 0); });
+        app.onEvent('settingsButtonClicked', function () { TgSend('settingsButtonClicked', 0); });
+        app.onEvent('accelerometerChanged', function () { TgSend('accelerometerChanged', 0, { x: app.Accelerometer.x, y: app.Accelerometer.y, z: app.Accelerometer.z }); });
+        app.onEvent('gyroscopeChanged', function () { TgSend('gyroscopeChanged', 0, { x: app.Gyroscope.x, y: app.Gyroscope.y, z: app.Gyroscope.z }); });
+        app.onEvent('deviceOrientationChanged', function () { TgSend('deviceOrientationChanged', 0, { alpha: app.DeviceOrientation.alpha, beta: app.DeviceOrientation.beta, gamma: app.DeviceOrientation.gamma, absolute: app.DeviceOrientation.absolute }); });
       }
 
       var buildUrl = 'Build';
@@ -425,22 +262,13 @@
         productVersion: "0.1.0",
         showBanner: unityShowBanner,
       };
-
       loadingBar.style.display = 'block';
-
       var script = document.createElement('script');
       script.src = loaderUrl;
       script.onload = function () {
-        createUnityInstance(canvas, config, function (progress) {
-          progressBarFull.style.width = 100 * progress + '%';
-        }).then(function (instance) {
-          loadingBar.style.display = 'none';
-          gameInstance = instance;
-          tgForwardAll();
-          // ready()/expand()/全屏/方向锁由 tgWaitConfig → tgWhenReady 统一处理（等配置就绪）
-        }).catch(function (message) {
-          alert(message);
-        });
+        createUnityInstance(canvas, config, function (progress) { progressBarFull.style.width = 100 * progress + '%'; })
+          .then(function (instance) { loadingBar.style.display = 'none'; gameInstance = instance; tgForwardAll(); })
+          .catch(function (message) { alert(message); });
       };
       document.body.appendChild(script);
     </script>

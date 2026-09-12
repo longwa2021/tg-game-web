@@ -1,6 +1,6 @@
 {
     "autoExpand": true,
-    "autoFullscreen": true,
-    "lockOrientation": "",
+    "autoFullscreen": false,
+    "lockOrientation": "portrait",
     "debug": true
 }
