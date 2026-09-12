@@ -5,7 +5,42 @@
     <meta name="viewport" content="width=device-width,height=device-height,initial-scale=1.0,maximum-scale=1.0,user-scalable=no" />
     <title>Unity WebGL Player | 龙哥的秘密花园_微信小游戏</title>
     <!-- 构建时注入：window.TG_BUILD_ID / window.TG_RESOURCE_BASE -->
-    <script>window.TG_BUILD_ID="c9191914";window.TG_RESOURCE_BASE="https://7072-prod-d3glvsnl0211b1246-1339747589.tcb.qcloud.la";window.TG_STREAMING_ASSETS_URL="https://7072-prod-d3glvsnl0211b1246-1339747589.tcb.qcloud.la/StreamingAssets";</script>
+    <script>window.TG_BUILD_ID="2c4ebbe2";window.TG_RESOURCE_BASE="https://7072-prod-d3glvsnl0211b1246-1339747589.tcb.qcloud.la";window.TG_STREAMING_ASSETS_URL="https://7072-prod-d3glvsnl0211b1246-1339747589.tcb.qcloud.la/StreamingAssets";window.TG_LOG_PORT=8787;</script>
+    <!-- 本地日志：把 console / JS 错误转发到本机 Node 日志服务（构建启用时 window.TG_LOG_PORT>0） -->
+    <script>
+      (function () {
+        var port = (typeof window !== 'undefined' && window.TG_LOG_PORT) ? window.TG_LOG_PORT : 0;
+        if (!port) return;
+        var url = 'http://127.0.0.1:' + port + '/log';
+        function send(level, tag, msg, stack) {
+          try {
+            var body = JSON.stringify({ t: Date.now(), level: level, tag: tag, msg: String(msg), stack: stack || '' });
+            if (navigator.sendBeacon) navigator.sendBeacon(url, body);
+            else fetch(url, { method: 'POST', mode: 'no-cors', body: body });
+          } catch (e) {}
+        }
+        window.TgLocalLog = send;
+        ['log', 'info', 'warn', 'error', 'debug'].forEach(function (lvl) {
+          var orig = console[lvl] ? console[lvl].bind(console) : function () {};
+          console[lvl] = function () {
+            try {
+              var args = Array.prototype.slice.call(arguments).map(function (a) {
+                try { return (a && typeof a === 'object') ? JSON.stringify(a) : String(a); } catch (e) { return String(a); }
+              });
+              send(lvl === 'debug' ? 'log' : lvl, 'JS', args.join(' '));
+            } catch (e) {}
+            orig.apply(console, arguments);
+          };
+        });
+        window.addEventListener('error', function (e) {
+          send('error', 'JS', (e && e.message) || 'error', (e && e.error && e.error.stack) || '');
+        });
+        window.addEventListener('unhandledrejection', function (e) {
+          var r = e && e.reason;
+          send('error', 'JS', (r && r.message) || String(r), (r && r.stack) || '');
+        });
+      })();
+    </script>
     <!-- Telegram Mini App SDK：必须放在 head 里其他脚本之前 -->
     <script src="https://telegram.org/js/telegram-web-app.js?63"></script>
     <style>
